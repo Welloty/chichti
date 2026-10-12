@@ -1,12 +1,44 @@
 // ==========================================
-// ЧИЧТЫ: Рофло Мод-Меню для Mindustry (v146+)
+// ЧИЧТЫ: Рофло-мод меню для Mindustry v146+
 // ==========================================
 
 Events.on(ClientLoadEvent, () => {
     let menuVisible = true;
+    let menuPanel = null;
     let spamActive = false;
     let spamTimer = null;
     let spamCount = 0;
+    let totalSpawned = 0;
+    let effectsEnabled = true;
+    let shakeEnabled = true;
+    let soundVolumeIndex = 2;
+    let spawnCountIndex = 0;
+    let intervalIndex = 1;
+    let spreadIndex = 1;
+    let locationIndex = 0;
+    let jokeIndex = 0;
+    let logLines = [];
+    let spawnedByMod = [];
+
+    const spawnCounts = [1, 2, 4, 8];
+    const intervals = [0.5, 1, 2, 5];
+    const spreads = [0, 40, 80, 160];
+    const soundVolumes = [0, 0.35, 0.7, 1];
+    const soundLabels = ["ВЫКЛ", "35%", "70%", "100%"];
+    const locationLabels = ["Игрок", "Курсор", "Ядро"];
+    const jokeMessages = [
+        "Чич прошёл проверку на адекватность. Результат: не найден.",
+        "Античит заметил подозрительно весёлого игрока.",
+        "Сервер сообщил: Чич слишком мощный для этого измерения.",
+        "Внимание: обнаружено скопление Чичей. Паника отменяется."
+    ];
+    const t5Units = [UnitTypes.corvus, UnitTypes.toxopid, UnitTypes.eclipse, UnitTypes.omura, UnitTypes.reign];
+    let selectedUnitIndex = 0;
+
+    function recordAction(message) {
+        logLines.unshift("[lightgray]" + message + "[]");
+        if (logLines.length > 4) logLines.pop();
+    }
 
     function stopSpam() {
         spamActive = false;
@@ -16,188 +48,265 @@ Events.on(ClientLoadEvent, () => {
         }
     }
 
-    // Останавливаем таймер при возврате в главное меню.
-    Events.on(StateChangeEvent, event => {
-        if (event.to != null && String(event.to) === "menu") {
-            stopSpam();
+    function playExplosion(x, y) {
+        if (soundVolumes[soundVolumeIndex] > 0) {
+            Sounds.explosion.at(x, y, 1, soundVolumes[soundVolumeIndex]);
         }
-    });
-
-    // Список доступных Т5 юнитов для спама и спавна
-    const t5Units = [
-        UnitTypes.corvus,   // Ворон
-        UnitTypes.toxopid,  // Токсопид
-        UnitTypes.eclipse,  // Затмение
-        UnitTypes.omura,    // Омура
-        UnitTypes.reign     // Царство
-    ];
-    let selectedUnitIndex = 0; // По умолчанию Corvus (Ворон)
+    }
 
     function getPlayerPos() {
         if (!Vars.player) return { x: 0, y: 0 };
-        return {
-            x: Vars.player.x,
-            y: Vars.player.y
-        };
+        return { x: Vars.player.x, y: Vars.player.y };
     }
 
-    // Создаем интерфейс в общем HUD
+    function getSpawnPos() {
+        let playerPos = getPlayerPos();
+        if (locationIndex === 1 && Vars.player) {
+            return { x: Vars.player.mouseX, y: Vars.player.mouseY };
+        }
+        if (locationIndex === 2 && Vars.player) {
+            let core = Vars.player.core();
+            if (core != null) return { x: core.x, y: core.y };
+        }
+        return playerPos;
+    }
+
+    function pruneSpawnedUnits() {
+        for (let i = spawnedByMod.length - 1; i >= 0; i--) {
+            try {
+                if (spawnedByMod[i] == null || !spawnedByMod[i].isAdded()) spawnedByMod.splice(i, 1);
+            } catch (e) {
+                spawnedByMod.splice(i, 1);
+            }
+        }
+    }
+
+    function spawnSelected(count) {
+        pruneSpawnedUnits();
+        let pos = getSpawnPos();
+        let unitType = t5Units[selectedUnitIndex];
+        let team = Vars.player.team();
+        let spread = spreads[spreadIndex];
+        let created = 0;
+        for (let i = 0; i < count; i++) {
+            let offsetX = spread === 0 ? 0 : (Math.random() - 0.5) * spread;
+            let offsetY = spread === 0 ? 0 : (Math.random() - 0.5) * spread;
+            let unit = unitType.spawn(team, pos.x + offsetX, pos.y + offsetY);
+            if (unit != null) {
+                spawnedByMod.push(unit);
+                created++;
+            }
+        }
+        totalSpawned += created;
+        return { pos: pos, unitType: unitType, count: created };
+    }
+
+    function spawnSpamBatch() {
+        if (!spamActive || !Vars.state || !Vars.state.isPlaying() || !Vars.player) return;
+        try {
+            let spawned = spawnSelected(spawnCounts[spawnCountIndex]);
+            spamCount += spawned.count;
+            if (effectsEnabled) Fx.spawn.at(spawned.pos.x, spawned.pos.y);
+        } catch (err) {
+            stopSpam();
+            Vars.ui.hudfrag.showToast("[scarlet]Автоспавн остановлен из-за ошибки[]");
+        }
+    }
+
+    function scheduleSpam() {
+        if (spamTimer != null) spamTimer.cancel();
+        spamTimer = Timer.schedule(() => spawnSpamBatch(), 0, intervals[intervalIndex]);
+    }
+
+    Events.on(StateChangeEvent, event => {
+        if (event.to != null && String(event.to) === "menu") {
+            stopSpam();
+            spawnedByMod = [];
+        }
+    });
+
     Vars.ui.hudGroup.fill(cons(table => {
         table.top().right();
-
-        // Отображать только когда идет реальная игра
-        // Обновляем boolean-поле напрямую: Rhino некорректно разрешает здесь visible(Boolp).
         table.update(() => {
             table.visible = Vars.state != null && Vars.state.isGame();
         });
 
-        // Контейнер всего мод-меню
         table.table(cons(container => {
             container.top().right().margin(10);
+            container.button("[accent]ЧИЧТЫ — свернуть / развернуть", Styles.cleart, () => {
+                menuVisible = !menuVisible;
+                if (menuPanel != null) menuPanel.visible = menuVisible;
+            }).size(210, 36).padBottom(4).row();
 
-            // 1. Маленькая кнопка сворачивания/разворачивания
-            container.table(cons(header => {
-                header.button("[accent]ЧИЧТЫ — свернуть / развернуть", Styles.cleart, () => {
-                    menuVisible = !menuVisible;
-                }).size(130, 36).padBottom(4);
-            })).right().row();
-
-            // 2. Основная панель читов (точно как на скриншоте)
             container.table(Styles.black8, cons(menu => {
-                menu.update(() => {
-                    menu.visible = menuVisible;
-                }); // Скрывать при сворачивании
-                menu.margin(12);
+                menuPanel = menu;
+                menu.margin(10);
+                menu.add("[scarlet]Ч И Ч Т Ы[]").style(Styles.outlineLabel).padBottom(7).row();
 
-                // Заголовок
-                menu.add("[scarlet]Ч И Ч Т Ы[]")
-                    .style(Styles.outlineLabel)
-                    .padBottom(10)
-                    .row();
-
-                // Выбор типа юнита (для разнообразия)
                 menu.table(cons(selector => {
                     selector.button("<", Styles.flatBordert, () => {
                         selectedUnitIndex = (selectedUnitIndex - 1 + t5Units.length) % t5Units.length;
-                    }).size(32, 32);
-
+                    }).size(30, 30);
                     selector.label(prov(() => "[stat]" + t5Units[selectedUnitIndex].localizedName + "[]"))
-                        .width(140)
-                        .center();
-
+                        .width(145).center();
                     selector.button(">", Styles.flatBordert, () => {
                         selectedUnitIndex = (selectedUnitIndex + 1) % t5Units.length;
-                    }).size(32, 32);
-                })).padBottom(8).row();
+                    }).size(30, 30);
+                })).padBottom(5).row();
 
-                // ----------------------------------------------------
-                // КНОПКА: ВЫДАТЬ выбранный юнит (4 шт сразу)
-                // ----------------------------------------------------
-                menu.button("[lime]ВЫДАТЬ выбранный юнит ×4[]", Styles.flatBordert, () => {
+                menu.button("[lime]ВЫДАТЬ выбранный юнит[]", Styles.flatBordert, () => {
                     try {
-                        let pos = getPlayerPos();
-                        let unitType = t5Units[selectedUnitIndex];
-                        let team = Vars.player.team();
-
-                        for (let i = 0; i < 4; i++) {
-                            let offsetX = (Math.random() - 0.5) * 80;
-                            let offsetY = (Math.random() - 0.5) * 80;
-                            unitType.spawn(team, pos.x + offsetX, pos.y + offsetY);
+                        let spawned = spawnSelected(spawnCounts[spawnCountIndex]);
+                        if (effectsEnabled) {
+                            Fx.impactReactorExplosion.at(spawned.pos.x, spawned.pos.y);
+                            Fx.bigShockwave.at(spawned.pos.x, spawned.pos.y);
                         }
-
-                        // Эффекты взрыва и зеленых молний, как на скрине
-                        Fx.impactReactorExplosion.at(pos.x, pos.y);
-                        Fx.bigShockwave.at(pos.x, pos.y);
-                        Sounds.explosion.at(pos.x, pos.y);
-                        Effect.shake(5, 15, pos.x, pos.y);
-
-                        Vars.ui.hudfrag.showToast("[lime]4x " + unitType.localizedName + " успешно призваны![]");
+                        playExplosion(spawned.pos.x, spawned.pos.y);
+                        if (shakeEnabled) Effect.shake(5, 15, spawned.pos.x, spawned.pos.y);
+                        Vars.ui.hudfrag.showToast("[lime]Призвано ×" + spawned.count + " " + spawned.unitType.localizedName + "[]");
+                        recordAction("Призыв ×" + spawned.count + " " + spawned.unitType.localizedName);
                     } catch (e) {
                         Vars.ui.hudfrag.showToast("[scarlet]Ошибка спавна: " + String(e) + "[]");
                     }
-                }).size(260, 48).pad(4).get();
-                menu.row();
+                }).size(270, 38).pad(2).row();
 
-                // ----------------------------------------------------
-                // КНОПКА: БЕСКОНЕЧНЫЙ КРЕМНИЙ
-                // ----------------------------------------------------
+                menu.table(cons(config => {
+                    config.button("Количество +", Styles.flatBordert, () => {
+                        spawnCountIndex = (spawnCountIndex + 1) % spawnCounts.length;
+                        recordAction("Количество за цикл: " + spawnCounts[spawnCountIndex]);
+                    }).size(130, 32);
+                    config.button("Интервал +", Styles.flatBordert, () => {
+                        intervalIndex = (intervalIndex + 1) % intervals.length;
+                        if (spamActive) scheduleSpam();
+                        recordAction("Интервал автоспавна: " + intervals[intervalIndex] + "с");
+                    }).size(130, 32);
+                })).pad(2).row();
+                menu.label(prov(() => "[accent]×" + spawnCounts[spawnCountIndex] + " за цикл · " + intervals[intervalIndex] + " сек[]"))
+                    .left().row();
+
+                menu.table(cons(config => {
+                    config.button("Место +", Styles.flatBordert, () => {
+                        locationIndex = (locationIndex + 1) % locationLabels.length;
+                        recordAction("Место появления: " + locationLabels[locationIndex]);
+                    }).size(130, 32);
+                    config.button("Разброс +", Styles.flatBordert, () => {
+                        spreadIndex = (spreadIndex + 1) % spreads.length;
+                        recordAction("Разброс появления: " + spreads[spreadIndex]);
+                    }).size(130, 32);
+                })).pad(2).row();
+                menu.label(prov(() => "[accent]Место: " + locationLabels[locationIndex] + " · разброс: " + spreads[spreadIndex] + "[]"))
+                    .left().row();
+
                 menu.button("[scarlet]БЕСКОНЕЧНЫЙ КРЕМНИЙ[]", Styles.flatBordert, () => {
                     try {
                         let core = Vars.player.core();
                         if (core != null) {
                             core.items.set(Items.silicon, 99999);
-                            Fx.healWave.at(core.x, core.y);
+                            if (effectsEnabled) Fx.healWave.at(core.x, core.y);
                             Vars.ui.hudfrag.showToast("[accent]+99999 Кремния в ядро![]");
+                            recordAction("Выдан кремний");
                         } else {
                             Vars.ui.hudfrag.showToast("[scarlet]Ядро не найдено![]");
                         }
                     } catch (e) {
                         Vars.ui.hudfrag.showToast("[scarlet]Ошибка выдачи кремния: " + String(e) + "[]");
                     }
-                }).size(260, 44).pad(4).row();
+                }).size(270, 36).pad(2).row();
 
-                // ----------------------------------------------------
-                // КНОПКА: СПАМ Т5 (в секунду)
-                // ----------------------------------------------------
-                menu.label(prov(() => {
-                        let statusColor = spamActive ? "[green]" : "[scarlet]";
-                        let statusText = spamActive ? spamCount : "0";
-                        return statusColor + "СПАМ Т5 (в секунду)    " + statusText + "[]";
-                    })).left().row();
-                menu.button("[accent]Переключить автоспам", Styles.flatBordert, () => {
-                    spamActive = !spamActive;
-
+                menu.label(prov(() => (spamActive ? "[green]" : "[scarlet]") + "АВТОСПАВН: " + (spamActive ? "ВКЛ · " + spamCount : "ВЫКЛ") + "[]"))
+                    .left().row();
+                menu.button("[accent]Старт / стоп автоспавна[]", Styles.flatBordert, () => {
                     if (spamActive) {
-                        spamCount = 0;
-                        spamTimer = Timer.schedule(() => {
-                            if (!spamActive || !Vars.state || !Vars.state.isPlaying() || !Vars.player) return;
-                            try {
-                                let pos = getPlayerPos();
-                                let unitType = t5Units[selectedUnitIndex];
-                                unitType.spawn(Vars.player.team(), pos.x, pos.y);
-                                spamCount++;
-                                Fx.spawn.at(pos.x, pos.y);
-                            } catch (err) {
-                                stopSpam();
-                                Vars.ui.hudfrag.showToast("[scarlet]Автоспам остановлен из-за ошибки спавна[]");
-                            }
-                        }, 0, 1); // Каждую 1 секунду
-                        Vars.ui.hudfrag.showToast("[green]Автоспам Т5 ВКЛЮЧЕН![]");
-                    } else {
                         stopSpam();
-                        Vars.ui.hudfrag.showToast("[scarlet]Автоспам Т5 ВЫКЛЮЧЕН![]");
+                        recordAction("Автоспавн остановлен");
+                        Vars.ui.hudfrag.showToast("[scarlet]Автоспавн выключен[]");
+                    } else {
+                        spamActive = true;
+                        spamCount = 0;
+                        scheduleSpam();
+                        recordAction("Автоспавн включён");
+                        Vars.ui.hudfrag.showToast("[green]Автоспавн включён[]");
                     }
-                }).size(260, 44).pad(4).row();
+                }).size(270, 36).pad(2).row();
 
-                // ----------------------------------------------------
-                // КНОПКА: ЗАБАНИТЬ ЧИЧА
-                // ----------------------------------------------------
+                menu.button("[scarlet]Очистить юниты, созданные меню[]", Styles.flatBordert, () => {
+                    let removed = 0;
+                    for (let i = spawnedByMod.length - 1; i >= 0; i--) {
+                        try {
+                            let unit = spawnedByMod[i];
+                            if (unit != null && unit.isAdded()) {
+                                unit.kill();
+                                removed++;
+                            }
+                        } catch (e) { }
+                    }
+                    spawnedByMod = [];
+                    recordAction("Очищено юнитов: " + removed);
+                    Vars.ui.hudfrag.showToast("[accent]Удалено созданных модом юнитов: " + removed + "[]");
+                }).size(270, 34).pad(2).row();
+                menu.label(prov(() => {
+                    pruneSpawnedUnits();
+                    return "[lightgray]Создано меню и живо: " + spawnedByMod.length + "[]";
+                })).left().row();
+
+                menu.table(cons(options => {
+                    options.button("Эффекты вкл/выкл", Styles.flatBordert, () => {
+                        effectsEnabled = !effectsEnabled;
+                        recordAction("Эффекты " + (effectsEnabled ? "включены" : "выключены"));
+                    }).size(130, 32);
+                    options.button("Тряска вкл/выкл", Styles.flatBordert, () => {
+                        shakeEnabled = !shakeEnabled;
+                        recordAction("Тряска " + (shakeEnabled ? "включена" : "выключена"));
+                    }).size(130, 32);
+                })).pad(2).row();
+                menu.label(prov(() => "[accent]Эффекты: " + (effectsEnabled ? "ВКЛ" : "ВЫКЛ") + " · тряска: " + (shakeEnabled ? "ВКЛ" : "ВЫКЛ") + "[]"))
+                    .left().row();
+                menu.button("[accent]Изменить громкость звука[]", Styles.flatBordert, () => {
+                    soundVolumeIndex = (soundVolumeIndex + 1) % soundVolumes.length;
+                    recordAction("Громкость звука: " + soundLabels[soundVolumeIndex]);
+                }).size(270, 34).pad(2).row();
+                menu.label(prov(() => "[accent]Громкость звука: " + soundLabels[soundVolumeIndex] + "[]"))
+                    .left().row();
+
+                menu.button("[scarlet]СЮРПРИЗ ДЛЯ ЧИЧА[]", Styles.flatBordert, () => {
+                    let pos = getPlayerPos();
+                    let message = jokeMessages[jokeIndex];
+                    jokeIndex = (jokeIndex + 1) % jokeMessages.length;
+                    if (effectsEnabled) {
+                        Fx.spawn.at(pos.x, pos.y);
+                        Fx.bigShockwave.at(pos.x, pos.y);
+                    }
+                    playExplosion(pos.x, pos.y);
+                    if (shakeEnabled) Effect.shake(8, 18, pos.x, pos.y);
+                    Vars.ui.hudfrag.showToast("[scarlet]" + message + "[]");
+                    recordAction("Сюрприз для Чича");
+                }).size(270, 34).pad(2).row();
+
                 menu.button("[scarlet]ЗАБАНИТЬ ЧИЧА[]", Styles.flatBordert, () => {
                     let pos = getPlayerPos();
-
-                    // Огромный ядерный взрыв и звуки
                     for (let i = 0; i < 5; i++) {
                         Time.run(i * 4, () => {
-                            Fx.reactorExplosion.at(pos.x + (Math.random() - 0.5) * 60, pos.y + (Math.random() - 0.5) * 60);
-                            Fx.bigShockwave.at(pos.x, pos.y);
+                            if (effectsEnabled) {
+                                Fx.reactorExplosion.at(pos.x + (Math.random() - 0.5) * 60, pos.y + (Math.random() - 0.5) * 60);
+                                Fx.bigShockwave.at(pos.x, pos.y);
+                            }
                         });
                     }
-                    Sounds.explosion.at(pos.x, pos.y);
-                    Effect.shake(20, 40, pos.x, pos.y);
+                    playExplosion(pos.x, pos.y);
+                    if (shakeEnabled) Effect.shake(20, 40, pos.x, pos.y);
+                    if (Vars.player && Vars.player.unit()) Vars.player.unit().kill();
+                    Vars.ui.hudfrag.showToast("[scarlet]ЧИЧ БЫЛ УСПЕШНО ЗАБАНЕН АНТИЧИТОМ![]");
+                    recordAction("Чич забанен (понарошку)");
+                }).size(270, 34).pad(2).row();
 
-                    // Убить юнита игрока ради рофла
-                    if (Vars.player && Vars.player.unit()) {
-                        Vars.player.unit().kill();
-                    }
-
-                    // Сообщение о бане
-                    Vars.ui.hudfrag.showToast(
-                        "[scarlet]ЧИЧ БЫЛ УСПЕШНО ЗАБАНЕН АНТИЧИТОМ![]"
-                    );
-                }).size(260, 44).pad(4).row();
-
+                menu.label(prov(() => "[lightgray]Всего призвано: " + totalSpawned + "[]")).left().padTop(3).row();
+                menu.add("[accent]Последние действия[]").left().padTop(2).row();
+                for (let i = 0; i < 4; i++) {
+                    let logIndex = i;
+                    menu.label(prov(() => logLines[logIndex] || "[darkgray]—[]"))
+                        .left().width(270).wrap().row();
+                }
             }));
-
         }));
     }));
 });
