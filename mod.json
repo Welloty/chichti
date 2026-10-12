@@ -1,0 +1,9 @@
+{
+  "name": "chichts-menu",
+  "displayName": "[scarlet]ЧИЧТЫ[]",
+  "author": "codex, gpt 6 luna medium",
+  "description": "Рофло мод-меню: спавн Воронов, бесконечный кремний, авто-спам Т5 и кнопка бана чича с ядерным взрывом.",
+  "version": "1.5",
+  "minGameVersion": "140",
+  "hidden": false
+}
