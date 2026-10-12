@@ -32,12 +32,25 @@ Events.on(ClientLoadEvent, () => {
         "Сервер сообщил: Чич слишком мощный для этого измерения.",
         "Внимание: обнаружено скопление Чичей. Паника отменяется."
     ];
-    const t5Units = [UnitTypes.corvus, UnitTypes.toxopid, UnitTypes.eclipse, UnitTypes.omura, UnitTypes.reign];
-    let selectedUnitIndex = 0;
 
     function recordAction(message) {
         logLines.unshift("[lightgray]" + message + "[]");
         if (logLines.length > 4) logLines.pop();
+    }
+
+    function playExplosion(x, y) {
+        if (soundVolumes[soundVolumeIndex] > 0) {
+            Sounds.explosion.at(x, y, 1, soundVolumes[soundVolumeIndex]);
+        }
+    }
+
+    function playSpawnEffects(x, y) {
+        if (effectsEnabled) {
+            Fx.impactReactorExplosion.at(x, y);
+            Fx.bigShockwave.at(x, y);
+        }
+        playExplosion(x, y);
+        if (shakeEnabled) Effect.shake(5, 15, x, y);
     }
 
     function stopSpam() {
@@ -48,11 +61,21 @@ Events.on(ClientLoadEvent, () => {
         }
     }
 
-    function playExplosion(x, y) {
-        if (soundVolumes[soundVolumeIndex] > 0) {
-            Sounds.explosion.at(x, y, 1, soundVolumes[soundVolumeIndex]);
+    Events.on(StateChangeEvent, event => {
+        if (event.to != null && String(event.to) === "menu") {
+            stopSpam();
+            spawnedByMod = [];
         }
-    }
+    });
+
+    const t5Units = [
+        UnitTypes.corvus,
+        UnitTypes.toxopid,
+        UnitTypes.eclipse,
+        UnitTypes.omura,
+        UnitTypes.reign
+    ];
+    let selectedUnitIndex = 0;
 
     function getPlayerPos() {
         if (!Vars.player) return { x: 0, y: 0 };
