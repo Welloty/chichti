@@ -1,9 +1,9 @@
 {
   "name": "chichts-menu",
   "displayName": "[scarlet]ЧИЧТЫ[]",
-  "author": "codex, gpt 6 luna medium",
+  "author": "Welloty",
   "description": "Рофло мод-меню: настраиваемый спавн Т5, очистка своих юнитов, эффекты и шуточные события.",
-  "version": "1.9",
+  "version": "1.7",
   "minGameVersion": "140",
   "hidden": false
 }
