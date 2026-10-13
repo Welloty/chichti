@@ -66,7 +66,7 @@ Events.on(ClientLoadEvent, () => {
         if (disclaimerShown) return;
         disclaimerShown = true;
         Time.run(2, () => {
-            if (Vars.state != null && Vars.state.isGame()) {
+            if (Vars.state != null && (Vars.state.isMenu() || Vars.state.isGame())) {
                 Vars.ui.showInfoText(
                     "Дисклеймер — ЧИЧТЫ",
                     "Это шуточный мод-меню для Mindustry.\n\n" +
@@ -83,16 +83,12 @@ Events.on(ClientLoadEvent, () => {
         if (event.to != null && String(event.to) === "menu") {
             stopSpam();
             spawnedByMod = [];
-            disclaimerShown = false;
             return;
-        }
-        if (event.to != null && String(event.to) === "playing") {
-            showDisclaimer();
         }
     });
 
-    // WorldLoadEvent покрывает вход в карту даже если HUD ещё не обновился.
-    Events.on(WorldLoadEvent, () => showDisclaimer());
+    // Показываем дисклеймер после загрузки клиента, прямо в главном меню.
+    Time.run(30, () => showDisclaimer());
 
     const t5Units = [
         UnitTypes.corvus,
