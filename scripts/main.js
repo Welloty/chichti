@@ -5,6 +5,7 @@
 Events.on(ClientLoadEvent, () => {
     let menuVisible = true;
     let menuPanel = null;
+    let disclaimerShown = false;
     let spamActive = false;
     let spamTimer = null;
     let spamCount = 0;
@@ -65,6 +66,24 @@ Events.on(ClientLoadEvent, () => {
         if (event.to != null && String(event.to) === "menu") {
             stopSpam();
             spawnedByMod = [];
+            disclaimerShown = false;
+            return;
+        }
+
+        if (event.to != null && String(event.to) === "playing" && !disclaimerShown) {
+            disclaimerShown = true;
+            Time.run(2, () => {
+                if (Vars.state != null && Vars.state.isGame()) {
+                    Vars.ui.showInfoText(
+                        "Дисклеймер — ЧИЧТЫ",
+                        "Это шуточный мод-меню для Mindustry.\n\n" +
+                        "В одиночной игре, на своих серверах и в песочнице меню работает напрямую и без ограничений.\n\n" +
+                        "На чужих онлайн-серверах почти все функции блокируются сервером, если у вас нет прав администратора."
+                    );
+                } else {
+                    disclaimerShown = false;
+                }
+            });
         }
     });
 
