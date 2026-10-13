@@ -86,7 +86,13 @@ Events.on(ClientLoadEvent, () => {
             disclaimerShown = false;
             return;
         }
+        if (event.to != null && String(event.to) === "playing") {
+            showDisclaimer();
+        }
     });
+
+    // WorldLoadEvent покрывает вход в карту даже если HUD ещё не обновился.
+    Events.on(WorldLoadEvent, () => showDisclaimer());
 
     const t5Units = [
         UnitTypes.corvus,
