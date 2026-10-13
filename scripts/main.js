@@ -62,17 +62,7 @@ Events.on(ClientLoadEvent, () => {
         }
     }
 
-    Events.on(StateChangeEvent, event => {
-        if (event.to != null && String(event.to) === "menu") {
-            stopSpam();
-            spawnedByMod = [];
-            disclaimerShown = false;
-            return;
-        }
-
-    });
-
-    Events.on(PlayEvent, () => {
+    function showDisclaimer() {
         if (disclaimerShown) return;
         disclaimerShown = true;
         Time.run(2, () => {
@@ -87,6 +77,15 @@ Events.on(ClientLoadEvent, () => {
                 disclaimerShown = false;
             }
         });
+    }
+
+    Events.on(StateChangeEvent, event => {
+        if (event.to != null && String(event.to) === "menu") {
+            stopSpam();
+            spawnedByMod = [];
+            disclaimerShown = false;
+            return;
+        }
     });
 
     const t5Units = [
@@ -172,7 +171,9 @@ Events.on(ClientLoadEvent, () => {
     Vars.ui.hudGroup.fill(cons(table => {
         table.top().right();
         table.update(() => {
-            table.visible = Vars.state != null && Vars.state.isGame();
+            let inGame = Vars.state != null && Vars.state.isGame();
+            table.visible = inGame;
+            if (inGame && Vars.state.isPlaying() && !disclaimerShown) showDisclaimer();
         });
 
         table.table(cons(container => {
