@@ -1,0 +1,55 @@
+name: Build mod and publish release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Validate version and build mod archive
+        id: package
+        shell: bash
+        run: |
+          version="$(jq -r '.version' mod.json)"
+          tag_version="${GITHUB_REF_NAME#v}"
+
+          if [[ -z "$version" || "$version" == "null" ]]; then
+            echo "mod.json has no version" >&2
+            exit 1
+          fi
+
+          if [[ "$tag_version" != "$version" ]]; then
+            echo "Tag version '$tag_version' does not match mod.json version '$version'" >&2
+            exit 1
+          fi
+
+          asset="chichts-menu-${version}.zip"
+          zip -r "$asset" mod.json icon.png scripts/
+          unzip -l "$asset"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release and upload mod
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.package.outputs.version }}
+        shell: bash
+        run: |
+          asset="chichts-menu-${VERSION}.zip"
+
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$asset" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$asset" \
+              --title "ЧИЧТЫ ${VERSION}" \
+              --generate-notes \
+              --verify-tag
+          fi
