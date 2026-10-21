@@ -2,8 +2,8 @@
   "name": "chichts-menu",
   "displayName": "[scarlet]ЧИЧТЫ[]",
   "author": "Welloty",
-  "description": "Рофло мод-меню: настраиваемый спавн Т5, очистка своих юнитов, эффекты и шуточные события.",
-  "version": "1.7",
+  "description": "Рофло мод-меню: выбор и спавн юнитов, очистка своих юнитов, эффекты и шуточные события.",
+  "version": "1.8",
   "minGameVersion": "140",
   "hidden": false
 }
