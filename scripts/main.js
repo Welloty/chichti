@@ -88,14 +88,55 @@ Events.on(ClientLoadEvent, () => {
 
     Time.run(30, () => showDisclaimer());
 
-    const t5Units = [
-        UnitTypes.corvus,
-        UnitTypes.toxopid,
-        UnitTypes.eclipse,
-        UnitTypes.omura,
-        UnitTypes.reign
-    ];
-    let selectedUnitIndex = 0;
+    // Берём все доступные типы юнитов, включая добавленные другими модами.
+    const unitTypes = [];
+    Vars.content.units().each(cons(unitType => {
+        if (!unitType.internal) unitTypes.push(unitType);
+    }));
+    let selectedUnitType = UnitTypes.corvus;
+
+    function showUnitSelector() {
+        let dialog = new BaseDialog("Выбор юнита");
+        let listTable = null;
+        let searchText = "";
+
+        function rebuildList() {
+            if (listTable == null) return;
+            listTable.clearChildren();
+            listTable.defaults().size(250, 42).pad(3);
+            let shown = 0;
+            for (let i = 0; i < unitTypes.length; i++) {
+                let unitType = unitTypes[i];
+                let localizedName = String(unitType.localizedName);
+                let internalName = String(unitType.name);
+                if (searchText.length > 0 &&
+                    localizedName.toLowerCase().indexOf(searchText) === -1 &&
+                    internalName.toLowerCase().indexOf(searchText) === -1) continue;
+
+                listTable.button(unitType.localizedName, Styles.flatBordert, () => {
+                    selectedUnitType = unitType;
+                    recordAction("Выбран юнит: " + unitType.localizedName);
+                    dialog.hide();
+                }).growX();
+                shown++;
+                if (shown % 2 === 0) listTable.row();
+            }
+            if (shown % 2 !== 0) listTable.add().size(250, 42);
+            if (shown === 0) listTable.add("Юниты не найдены").colspan(2).pad(12);
+        }
+
+        let searchField = dialog.cont.field("", text => {
+            searchText = String(text).toLowerCase();
+            rebuildList();
+        }).growX().pad(8).get();
+        searchField.setMessageText("Поиск юнита");
+        dialog.cont.pane(cons(list => {
+            listTable = list;
+            rebuildList();
+        })).grow().maxHeight(500);
+        dialog.addCloseButton();
+        dialog.show();
+    }
 
     function getPlayerPos() {
         if (!Vars.player) return { x: 0, y: 0 };
@@ -127,7 +168,7 @@ Events.on(ClientLoadEvent, () => {
     function spawnSelected(count) {
         pruneSpawnedUnits();
         let pos = getSpawnPos();
-        let unitType = t5Units[selectedUnitIndex];
+        let unitType = selectedUnitType;
         let team = Vars.player.team();
         let spread = spreads[spreadIndex];
         let created = 0;
@@ -188,16 +229,10 @@ Events.on(ClientLoadEvent, () => {
                 menu.margin(10);
                 menu.add("[scarlet]Ч И Ч Т Ы[]").style(Styles.outlineLabel).padBottom(7).row();
 
-                menu.table(cons(selector => {
-                    selector.button("<", Styles.flatBordert, () => {
-                        selectedUnitIndex = (selectedUnitIndex - 1 + t5Units.length) % t5Units.length;
-                    }).size(30, 30);
-                    selector.label(prov(() => "[stat]" + t5Units[selectedUnitIndex].localizedName + "[]"))
-                        .width(145).center();
-                    selector.button(">", Styles.flatBordert, () => {
-                        selectedUnitIndex = (selectedUnitIndex + 1) % t5Units.length;
-                    }).size(30, 30);
-                })).padBottom(5).row();
+                menu.button("[accent]ВЫБРАТЬ ЮНИТА[]", Styles.flatBordert, () => showUnitSelector())
+                    .size(270, 36).pad(2).row();
+                menu.label(prov(() => "[stat]Выбран: " + selectedUnitType.localizedName + "[]"))
+                    .width(270).wrap().left().padBottom(5).row();
 
                 menu.button("[lime]ВЫДАТЬ выбранный юнит[]", Styles.flatBordert, () => {
                     try {
